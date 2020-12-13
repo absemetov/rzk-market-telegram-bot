@@ -13,12 +13,12 @@ bot.start((ctx) => {
 });
 
 //MonoBankApi
-async function getMonoCurrency(currencyNumber) {
+async function getMonoCurrency(currency) {
   try {
     const allCurrencyMonobank = await axios.get("https://api.monobank.ua/bank/currency");
 
     return allCurrencyMonobank.data.find((data) => {
-      return data.currencyCodeA === currencyNumber;
+      return data.currencyCodeA === Number(currency.number);
     });
 
   } catch (error) {
@@ -41,9 +41,13 @@ bot.on("text", async (ctx) => {
   if (!currency) {
     return ctx.reply("Currency didnt found");
   }
+
+  if(!["USD", "EUR", "RUB"].includes(currency.code)) {
+    return ctx.reply("Use only USD, EUR, RUB currencies!");
+  }
   
   //Get currency from Firebase
-  const currencyFirebase = await admin.firestore().doc('currency/' + currency.code).get();
+  const currencyFirebase = await admin.firestore().doc('currencies/' + currency.code).get();
   
   //Update data
   if (currencyFirebase.exists) {
@@ -53,11 +57,11 @@ bot.on("text", async (ctx) => {
     let timeDiff = Math.floor(Date.now() / 1000) - currencyRate.date;
     
     if (timeDiff > 60) {
-      let currencyMono = await getMonoCurrency(Number(currency.number));
+      let currencyMono = await getMonoCurrency(currency);
     
       if (currencyMono) {
         currencyMono.date = Math.floor(Date.now() / 1000);
-        await admin.firestore().doc('currency/' + currency.code).update(currencyMono); 
+        await admin.firestore().doc('currencies/' + currency.code).update(currencyMono); 
         currencyRate = currencyMono;
       }
     }
@@ -70,10 +74,9 @@ bot.on("text", async (ctx) => {
     
     if (currencyMono) {
       currencyMono.date = Math.floor(Date.now() / 1000);
-      await admin.firestore().doc('currency/' + currency.code).set(currencyMono);
+      await admin.firestore().doc('currencies/' + currency.code).set(currencyMono);
       currencyRate = currencyMono; 
     }
-
   }
 
   return ctx.replyWithMarkdown(`
@@ -84,11 +87,13 @@ RATE SELL: *${currencyRate.rateSell.toFixed(2)}*
 
 });
 
-//bot.launch();
+bot.launch();
+console.log('out closure');
 
 exports.bot = functions
   .region("europe-west1")
   .https.onRequest(async (req, res) => {
+    console.log('in closure');
     await bot.handleUpdate(req.body);
     res.sendStatus(200);
   });
